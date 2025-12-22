@@ -94,6 +94,7 @@ export const AppContextProvider = ({children})=>{
             setUser(null)
             setLoadingUser(false)
         }
+        fetchUser()
     },[token])
 
 
