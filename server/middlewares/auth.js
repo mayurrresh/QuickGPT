@@ -1,42 +1,26 @@
-import jwt from "jsonwebtoken";
-import User from "../models/user.js";
+// ----- CORS CONFIG (FIXED) -----
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://quick-gpt-git-main-mayuresh-kahars-projects.vercel.app",
+];
 
-export const protect = async (req, res, next) => {
-  let token;
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // allow server-to-server / Postman
+      if (!origin) return callback(null, true);
 
-  // ✅ Check header exists and starts correctly
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith("Bearer ")
-  ) {
-    token = req.headers.authorization.split(" ")[1];
-  }
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
 
-  if (!token) {
-    return res.status(401).json({
-      success: false,
-      message: "Not authorized, no token",
-    });
-  }
+      return callback(new Error("Not allowed by CORS"));
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
 
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    const user = await User.findById(decoded.id).select("-password");
-
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Not authorized, user not found",
-      });
-    }
-
-    req.user = user;
-    next();
-  } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: "Not authorized, token failed",
-    });
-  }
-};
+// allow preflight requests
+app.options("*", cors());
