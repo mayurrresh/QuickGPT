@@ -194,14 +194,30 @@ const Sidebar = ({ isMenuOpen, setIsMenuOpen }) => {
 
       {/* User */}
       <div className="flex items-center gap-3 p-3 mt-4 border border-gray-300 dark:border-white/15 rounded-md group">
-        <img src={assets.user_icon} className="w-7 rounded-full" alt="" />
-        <p className="flex-1 text-sm truncate">Mayuresh</p>
+        <img
+          src={assets.user_icon}
+          className="w-7 rounded-full"
+          alt="User"
+        />
+
+        <div className="flex-1 min-w-0">
+          <p className="text-sm truncate">
+            {user?.name || 'User'}
+          </p>
+
+          {user?.email && (
+            <p className="text-xs text-gray-400 truncate">
+              {user.email}
+            </p>
+          )}
+        </div>
+
         {user && (
           <img
             onClick={logout}
             src={assets.logout_icon}
             className="h-5 cursor-pointer hidden group-hover:block not-dark:invert"
-            alt=""
+            alt="Logout"
           />
         )}
       </div>
