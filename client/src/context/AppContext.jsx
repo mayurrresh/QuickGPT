@@ -1,113 +1,172 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { dummyChats, dummyUserData } from "../assets/assets.js";
-import axios from 'axios';
+import axios from "axios";
 import toast from "react-hot-toast";
 
 axios.defaults.baseURL = import.meta.env.VITE_SERVER_URL;
 
+// ================= AXIOS INTERCEPTOR =================
+axios.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
+const AppContext = createContext();
 
-const AppContext = createContext ()
+export const AppContextProvider = ({ children }) => {
+  const navigate = useNavigate();
 
-export const AppContextProvider = ({children})=>{
+  const [user, setUser] = useState(null);
+  const [chats, setChats] = useState([]);
+  const [selectedChat, setSelectedChat] = useState(null);
+  const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
+  const [token, setToken] = useState(localStorage.getItem("token"));
+  const [loadingUser, setLoadingUser] = useState(true);
 
-    const navigate = useNavigate()
-    const [user, setUser] = useState(null);
-    const [chats, setChats] = useState([]);
-    const [selectedChat, setSelectedChat] = useState(null);
-    const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
-    const [token, setToken] = useState(localStorage.getItem("token") || null)
+  // ================= LOGOUT =================
+  const forceLogout = () => {
+    localStorage.removeItem("token");
+    setToken(null);
+    setUser(null);
+    setChats([]);
+    setSelectedChat(null);
+    navigate("/login");
+  };
 
-    const [loadingUser, setLoadingUser ] = useState(true)
-
-    const fetchUser = async()=>{
-        try {
-            const { data } = await axios.get('/api/user/data', {headers: {Authorization: token }})
-            if(data.success){
-                setUser(data.user)
-            }else {
-                toast.error(data.message)
-            }
-        } catch (error) {
-                toast.error(error.message)
-        } finally {
-            setLoadingUser(false)
-        }
+  // ================= FETCH USER =================
+  const fetchUser = async () => {
+    if (!token) {
+      setLoadingUser(false);
+      return;
     }
 
-    const createNewChat = async () => {
-        try {
-            if(!user) return toast('Login to create a new chat')
-                navigate('/')
-            await axios.get('/api/chat/create', {headers: {Authorization: token}})
-            await fetchUsersChats()
-        } catch (error) {
-            toast.error(error.message)
-        }
+    try {
+      const { data } = await axios.get("/api/user/data");
+
+      if (data.success) {
+        setUser(data.user);
+      } else {
+        forceLogout();
+      }
+    } catch (error) {
+      if (error.response?.status === 401) {
+        forceLogout();
+      } else {
+        toast.error(error.message);
+      }
+    } finally {
+      setLoadingUser(false);
     }
+  };
 
-    const fetchUsersChats = async()=>{
-        try {
-            const {data} = await axios.get('/api/chat/get', {headers: {Authorization: token}})
-            if(data.success){
-                setChats(data.chats)
-                // if the user has no chats, create one
-                if(data.chats.length === 0) {
-                    await createNewChat();
-                    return fetchUsersChats()
-                }else{
-                    setSelectedChat(data.chats[0])
-                }
-            }else {
-                toast.error(data.message)
-            }
-        } catch (error) {
-                toast.error(error.message)
+  // ================= FETCH CHATS =================
+  const fetchUsersChats = async () => {
+    if (!token) return;
+
+    try {
+      const { data } = await axios.get("/api/chat/get");
+
+      if (!data?.success) {
+        toast.error(data.message);
+        return;
+      }
+
+      const fetchedChats = data.chats || [];
+      setChats(fetchedChats);
+
+      // ✅ Only set selectedChat if it does not exist
+      setSelectedChat((prev) => {
+        if (prev) {
+          // keep current chat if still exists
+          const stillExists = fetchedChats.find(
+            (chat) => chat?._id === prev._id
+          );
+          return stillExists || fetchedChats[0] || null;
         }
+        return fetchedChats[0] || null;
+      });
+    } catch (error) {
+      if (error.response?.status === 401) {
+        forceLogout();
+      } else {
+        toast.error(error.message);
+      }
     }
+  };
 
-    useEffect(()=>{
-        if(theme === "dark"){
-            document.documentElement.classList.add("dark")
-        }
-        else{
-            document.documentElement.classList.remove("dark")
-        }
-        localStorage.setItem('theme', theme)
-    },[theme])
+  // ================= CREATE CHAT =================
+  const createNewChat = async () => {
+    if (!user) return;
 
-    useEffect(()=>{
-        if(user){
-            fetchUsersChats()
-        }
-        else{
-            setChats([])
-            setSelectedChat(null)
-        }
-    },[user])
+    try {
+      const { data } = await axios.get("/api/chat/create");
 
-    useEffect(()=>{
-        if(token){
-            fetchUser()
-        }else{
-            setUser(null)
-            setLoadingUser(false)
-        }
-        fetchUser()
-    },[token])
+      if (!data?.success) {
+        toast.error(data.message);
+        return;
+      }
 
+      setChats((prev) => [data.chat, ...prev]);
+      setSelectedChat(data.chat);
+      navigate("/");
+    } catch (error) {
+      if (error.response?.status === 401) {
+        forceLogout();
+      } else {
+        toast.error(error.message);
+      }
+    }
+  };
 
-    const value = {
-        navigate,
+  // ================= THEME =================
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+
+  // ================= TOKEN CHANGE =================
+  useEffect(() => {
+    fetchUser();
+  }, [token]);
+
+  // ================= USER CHANGE =================
+  useEffect(() => {
+    if (user) {
+      fetchUsersChats();
+    } else {
+      setChats([]);
+      setSelectedChat(null);
+    }
+  }, [user]);
+
+  return (
+    <AppContext.Provider
+      value={{
         user,
-        setUser,fetchUser,chats,setChats,selectedChat,setSelectedChat,theme, setTheme, createNewChat, loadingUser, fetchUsersChats, token, setToken, axios
-    }
-    return (
-        <AppContext.Provider value={value}>
-            {children}
-        </AppContext.Provider>
-    )
-}
+        setUser,
+        chats,
+        setChats,
+        selectedChat,
+        setSelectedChat, // ✅ EXPOSED
+        theme,
+        setTheme,
+        loadingUser,
+        token,
+        setToken,
+        createNewChat,
+        fetchUsersChats,
+        axios,
+      }}
+    >
+      {children}
+    </AppContext.Provider>
+  );
+};
 
-export const useAppContext = ()=> useContext(AppContext)
+export const useAppContext = () => useContext(AppContext);
